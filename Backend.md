@@ -21,10 +21,6 @@ backend/
 ├─ 08 Routers.txt # doGet/doPost router & endpoint definitions
 └─ sheets.core.gs # Batch-first sheet helpers
 
-markdown
-Copy code
-
----
 
 ## 🔑 Key Components
 
@@ -94,16 +90,11 @@ Copy code
 **Users Sheet headers**:  
 username | Name | Role | Status | PasswordHash | Usability | AuthToken
 
-cpp
-Copy code
 
 **Logs Sheet headers** (optional, if logging enabled):  
 Timestamp | Level | Action | User | Name | Role | Message | Details
 
-yaml
-Copy code
 
----
 
 ## 🔒 Security Model
 - Passwords are never stored in plain text — only salted & peppered hashes.  
