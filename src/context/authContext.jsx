@@ -1,6 +1,7 @@
 // src/context/authContext.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { login as apiLogin, logoutServer, getStoredAuth, validateToken } from '../api/auth';
+import { useNavigate } from "react-router";
 
 const AuthContext = createContext();
 
@@ -34,20 +35,35 @@ export const AuthProvider = ({ children }) => {
   }, [setAuthSafe]);
 
   const logout = useCallback(async () => {
-    await logoutServer(); // also clears local
+    try {
+      await logoutServer(); // server-side cleanup
+    } catch (e) {
+      // ignore errors if server is unreachable
+    }
     setAuthSafe({ token: null, user: null });
+
+    // 🔹 Force full page reload to login
+    window.location.href = "/login";
   }, [setAuthSafe]);
 
   // Initial sync in case other tabs changed storage before mount
   useEffect(() => {
     const { token: t, user: u } = getStoredAuth();
-    setAuthSafe({ token: t, user: u });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (t) {
+      setAuthSafe({ token: t, user: u });
+      doValidate(); // run right away
+    }
   }, []);
 
   // Regular token validation
+  let lastValidation = 0;
   const doValidate = useCallback(async () => {
     if (!isAuthenticated) return;
+
+    const now = Date.now();
+    if (now - lastValidation < 2000) return; // skip if last call < 2s ago
+    lastValidation = now;
+
     try {
       const ok = await validateToken();
       if (!ok) await logout();
@@ -56,24 +72,35 @@ export const AuthProvider = ({ children }) => {
     }
   }, [isAuthenticated, logout]);
 
+
   useEffect(() => {
-    // on mount
-    doValidate();
+  const onStorage = (e) => {
+    if (e.key === 'auth-event') {
+      try {
+        const evt = JSON.parse(e.newValue || '{}');
+        if (evt?.type === 'logout') logout();
+      } catch {}
+    }
+    if (e.key === 'authToken' || e.key === 'authUser') {
+      const { token: t, user: u } = getStoredAuth();
+      setAuthSafe({ token: t, user: u });
+    }
+  };
 
-    // on focus / visibility
-    const onFocus = () => doValidate();
-    window.addEventListener('focus', onFocus);
-    window.addEventListener('visibilitychange', onFocus);
+  const id = setTimeout(() => {
+    window.addEventListener("focus", doValidate);
+    window.addEventListener("visibilitychange", doValidate);
+    window.addEventListener("storage", onStorage);
+  }, 100);
 
-    // periodic
-    const id = setInterval(doValidate, POLL_MS);
+  return () => {
+    clearTimeout(id);
+    window.removeEventListener("focus", doValidate);
+    window.removeEventListener("visibilitychange", doValidate);
+    window.removeEventListener("storage", onStorage);
+  };
+}, [doValidate, logout, setAuthSafe]);
 
-    return () => {
-      window.removeEventListener('focus', onFocus);
-      window.removeEventListener('visibilitychange', onFocus);
-      clearInterval(id);
-    };
-  }, [doValidate]);
 
   // Cross-tab sync & interceptors’ 401 broadcast
   useEffect(() => {
@@ -82,7 +109,7 @@ export const AuthProvider = ({ children }) => {
         try {
           const evt = JSON.parse(e.newValue || '{}');
           if (evt?.type === 'logout') logout();
-        } catch {}
+        } catch { }
       }
       if (e.key === 'authToken' || e.key === 'authUser') {
         const { token: t, user: u } = getStoredAuth();

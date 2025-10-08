@@ -118,14 +118,14 @@ export async function validateToken() {
       params: { action: 'auth/status' },
     });
     console.log('🔐 [AUTH RESPONSE] /auth/status:', response?.data);
-    return !!response?.data;
+
+    // ✅ return the actual backend signal
+    return response?.data?.success === true;
   } catch (error) {
     console.error('🔐 [AUTH ERROR] Token validation failed:', error);
     return false;
   }
 }
-
-
 
 // Helper to log current auth state
 export function logAuthState() {
